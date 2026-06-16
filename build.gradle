@@ -9,7 +9,7 @@ repositories {
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	minecraft "com.mojang:minecraft:${project.minecraft_target}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
@@ -18,7 +18,7 @@ processResources {
     def properties = [
 		version: project.version,
 		loader_version: project.loader_version,
-		minecraft_version: project.minecraft_version
+		minecraft_range: project.minecraft_range
 	]
 
 	inputs.properties(properties)
