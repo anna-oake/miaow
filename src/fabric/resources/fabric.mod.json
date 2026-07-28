@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "miaow",
+  "version": "${version}",
+  "name": "miaow",
+  "description": "${description}",
+  "authors": ["anna-oake"],
+  "contact": {
+    "homepage": "${homepage}",
+    "sources": "${sources}"
+  },
+  "license": "${license}",
+  "icon": "assets/miaow/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["cat.anya.miaow.MiaowFabric"],
+    "client": ["cat.anya.miaow.MiaowFabricClient"]
+  },
+  "mixins": [],
+  "depends": {
+    "fabricloader": ">=${loaderVersion}",
+    "minecraft": "${fabricMinecraftRange}",
+    "java": ">=${javaVersion}",
+    "fabric-api": ">=${fabricVersion}"
+  }
+}

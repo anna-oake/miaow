@@ -1,0 +1,26 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "${license}"
+
+[[mods]]
+modId = "miaow"
+version = "${version}"
+displayName = "miaow"
+logoFile = "assets/miaow/icon.png"
+displayURL = "${homepage}"
+authors = "${authors}"
+description = '''${description}'''
+
+[[dependencies.miaow]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforgeVersion},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.miaow]]
+modId = "minecraft"
+type = "required"
+versionRange = "${neoForgeMinecraftRange}"
+ordering = "NONE"
+side = "BOTH"

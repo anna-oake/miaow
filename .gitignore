@@ -2,8 +2,13 @@
 
 .gradle/
 build/
+dist/
+**/build/
 out/
 classes/
+versions/*-*/**
+.kotlin/
+scripts/
 
 # eclipse
 

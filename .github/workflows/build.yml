@@ -1,25 +1,155 @@
 name: build
-on: [pull_request, push]
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      mod_version: ${{ steps.metadata.outputs.mod_version }}
+      publish_matrix: ${{ steps.publication.outputs.publish_matrix }}
     steps:
       - name: checkout repository
         uses: actions/checkout@v6
-      - name: validate gradle wrapper
-        uses: gradle/actions/wrapper-validation@v6
+
       - name: setup jdk
         uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: "microsoft"
+
+      - name: setup gradle
+        uses: gradle/actions/setup-gradle@v6
+
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
+
+      - name: read mod metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mod_version="$(sed -n 's/^mod\.version=//p' gradle.properties)"
+          test -n "$mod_version"
+          echo "mod_version=$mod_version" >> "$GITHUB_OUTPUT"
+
+      - name: verify release tag matches mod version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          MOD_VERSION: ${{ steps.metadata.outputs.mod_version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" != "v$MOD_VERSION" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' does not match expected tag 'v$MOD_VERSION'."
+            exit 1
+          fi
+
       - name: build
         run: ./gradlew build
+
+      - name: prepare Modrinth publications
+        if: github.event_name == 'release'
+        id: publication
+        shell: bash
+        env:
+          MOD_VERSION: ${{ steps.metadata.outputs.mod_version }}
+        run: |
+          set -euo pipefail
+          entries='[]'
+
+          normalize_version() {
+            if [[ "$1" =~ ^[0-9]+\.[0-9]+$ ]]; then
+              echo "$1.0"
+            else
+              echo "$1"
+            fi
+          }
+
+          for file in dist/miaow-"$MOD_VERSION"-*.jar; do
+            filename="$(basename "$file" .jar)"
+            target="${filename#miaow-$MOD_VERSION-}"
+            loader="${target%%-*}"
+            range="${target#"$loader"-}"
+
+            if [[ "$range" == *-* ]]; then
+              minimum="$(normalize_version "${range%%-*}")"
+              maximum="$(normalize_version "${range#*-}")"
+              game_versions=">=$minimum <=$maximum"
+            else
+              game_versions="$range"
+            fi
+
+            dependencies='[]'
+            if [[ "$loader" == "fabric" ]]; then
+              dependencies='[{"project_id":"P7dR8mSH","dependency_type":"required"}]'
+            fi
+
+            entries="$(
+              jq -cn \
+                --argjson entries "$entries" \
+                --arg loader "$loader" \
+                --arg range "$range" \
+                --arg game_versions "$game_versions" \
+                --argjson dependencies "$dependencies" \
+                '$entries + [{
+                  loader: $loader,
+                  range: $range,
+                  game_versions: $game_versions,
+                  dependencies: $dependencies
+                }]'
+            )"
+          done
+
+          echo "publish_matrix=$(jq -cn --argjson include "$entries" '{include: $include}')" >> "$GITHUB_OUTPUT"
+
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Artifacts
-          path: build/libs/
+          name: miaow-${{ steps.metadata.outputs.mod_version }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: attach jars to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*.jar
+
+  publish-modrinth:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.build.outputs.publish_matrix) }}
+    steps:
+      - name: download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: miaow-${{ needs.build.outputs.mod_version }}
+          path: dist
+
+      - name: publish ${{ matrix.loader }} ${{ matrix.range }} to Modrinth
+        uses: cloudnode-pro/modrinth-publish@v2
+        with:
+          token: ${{ secrets.MODRINTH_TOKEN }}
+          project: u8TWg8mJ
+          name: miaow ${{ needs.build.outputs.mod_version }} (${{ matrix.loader }} ${{ matrix.range }})
+          version: ${{ needs.build.outputs.mod_version }}
+          channel: release
+          loaders: ${{ matrix.loader }}
+          game-versions: ${{ matrix.game_versions }}
+          files: dist/miaow-${{ needs.build.outputs.mod_version }}-${{ matrix.loader }}-${{ matrix.range }}.jar
+          dependencies: ${{ toJSON(matrix.dependencies) }}
+          changelog: ${{ github.event.release.body }}
